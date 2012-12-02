@@ -1,4 +1,4 @@
-## Benchmark Harness
+## Benchmark
 
 #### About
 
@@ -6,52 +6,87 @@
 
 **Number of threads:** 1,2,4,8,16,32,64
 
+**Datastructures:**
+
+1. Array
+2. ArrayList
+3. <ConcurrentArrayList>
+4. <ConcurrentHashMap>
+
 **Warmup**
 Runs the actual test on Number of Elements/1000, 5 times
 
-## 1. Benchmark Scale based on Element Size
+**Tests**
 
-#### Hypothesis
+1. Baseline Scaling
+2. Biased Locking
 
-Ops/sec increases as thread count increases, i.e completion of action will increase based on number of threads. Expection: Scaling is linear
+## 1. Baseline Scaling
 
-#### About
+This benchmark aims to provide a baseline and a general overview on systems performance varies based on various parameters and workloads as listed below. 
 
-**Workload methodologies**
+#### Parameters
 
-1. 100% Distributed* Read
-2. 100% Distributed* Write
-3. 100% Contended** Read
-4. 100% Contended** Write
+1. Datastructure
+2. How does choice 
+2. Number of Elements
+3. How many times the code is executed (Hot Path)
+4. Number of threads
 
-> ### Note
-> 
-> Thread load distribution (count) = No.of Elements/No.of Threads
-> 
-> **READ** = Read to a variable <br />
-> **WRITE** = Increment value by 1
-> 
-> **Distributed** - All threads perform action on the entire array of elements <br />
-> **Contended** - All threads perform action on "count" elements only
+#### Workloads
 
-#### Testing Framework
-This test was performed on 1 billion elements with warmup enabled.
+1. 100% Read (W1) - Reads iteratively/randomly from the list
+2. 100% Write (W2) - Writes iteratively/randomly to the list
+3. 80% Read, 20% Write (W3) 
+4. 20% Read, 80% Write (W4)
+5. 50% Read, 50% Write (W5)
+
+> Note: This benchmark does not use any synchronization primitives.
+
+### Test
+This test was performed on
+
+1. **Elements:** 100mil, 1 billion
+2. **DataStructure:** Array
+3. **Threads:** 1,2,4,8,16,32,64
 
 ````
-arr=(1 2 4 8 16 32 64)
+ # run.sh
+els=(100 1000)
+threads=(1 2 4 8 16 32 64)
+workloads=(W1 W2 W3 W4 W5)
 
-for i in "${arr[@]}"; 
-do 
-  java -server edu.buffalo.cse605.Harness DREAD $i 1
+ # warmup
+for e in "${els[@]}"; 
+do
+	for i in "${workloads[@]}"; 
+	do
+		for j in "${threads[@]}"; 
+		do 
+	  		java -server edu.buffalo.cse605.Harness $i $e $j 1
+		done
+	done
+done
+
+ # No warmup
+for e in "${els[@]}"; 
+do
+	for i in "${workloads[@]}"; 
+	do
+		for j in "${threads[@]}"; 
+		do 
+	  		java -server edu.buffalo.cse605.Harness $i $e $j 1
+		done
+	done
 done
 ````
 
-#### Results
+### Results
 CREAD, CWRIT
 DREAD, DWRIT
 // Need to put graphs
 
-#### Conclusion
+### Conclusion
 
 Based on previous results, scaling is linear till a particular number of threads.
 Performance is plateaued after a particular thread threshold is attained !
