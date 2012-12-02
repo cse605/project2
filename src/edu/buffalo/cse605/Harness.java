@@ -42,7 +42,7 @@ public class Harness {
 	  
 	  switch ( workloadType ) {
 	      case W2:
-	    	  Test.checkList(ITERATIONS)
+	    	  Test.checkList(ITERATIONS);
 	    	  break;
 	  }
   }
