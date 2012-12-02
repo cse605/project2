@@ -3,9 +3,6 @@ package edu.buffalo.cse605;
 import static java.lang.System.out;
 
 import java.util.concurrent.CyclicBarrier;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 import edu.buffalo.cse605.workloads.Test;
 
@@ -27,8 +24,9 @@ public class Harness {
 	  numThreads = Integer.parseInt(args[1]);
 	  warmUp = Integer.parseInt(args[2]);
 	  
-	  Test.setupList(WARMUP_ITERATIONS);
 	  if ( warmUp == 1 ) {
+		  out.printf("warmup => ");
+		  Test.setupList(WARMUP_ITERATIONS);
 		  for ( int i = 0; i < 10; i++) {
 			  runTest(numThreads, WARMUP_ITERATIONS);
 	      }
@@ -41,26 +39,12 @@ public class Harness {
 	  out.printf("%d threads, duration %,d (ns)\n", numThreads, duration);
 	  out.printf("%,d ns/op\n", duration / ITERATIONS);
 	  out.printf("%,d ops/s\n", (ITERATIONS * 1000000000L) / duration);
-//	  Test.checkList(ITERATIONS);
 	  
-//	  switch ( workloadType ) {
-//	      case SDWRIT:
-//	    	  for ( int j = 0; j < ITERATIONS; j++) {
-//	    		  if ( list[j] != 1 ) {
-//	    			  out.printf("value => %d", list[j]);
-//	    			  throw new Error("can`t assert => " + j);
-//	    		  }
-//	    	  }
-//	    	  break;
-//	      case SCWRIT:
-//	    	  for ( int j = 0; j < ITERATIONS/numThreads; j++) {
-//	    		  if ( list[j] != numThreads ) {
-//	    			  out.printf("value => %d", list[j]);
-//	    			  throw new Error("can`t assert => " + j);
-//	    		  }
-//	    	  }
-//	    	  break;
-//	    }
+	  switch ( workloadType ) {
+	      case W2:
+	    	  Test.checkList(ITERATIONS)
+	    	  break;
+	  }
   }
   
   private static void runTest(final int numThreads, final long iterationLimit) throws Exception {

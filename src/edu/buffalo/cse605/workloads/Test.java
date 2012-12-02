@@ -11,22 +11,21 @@ import edu.buffalo.cse605.Harness.WorkloadType;
 
 public class Test implements Runnable {
 	
+	private static final int SEGMENT_SIZE = 100 * 1000;
+	
 	private final CyclicBarrier barrier;
 	private final long iterationLimit;
 	private final int numThreads;
 	private final int threadId;
 	private final WorkloadType workloadType;
+	private final int numberOfSegments;
 	
 	public static Long[] list;
 	
-	private static int SEGMENT_SIZE = 100 * 1000;
-	private static int NUMBER_OF_SEGMENTS;
-	
-	public static final Object jvmLock = new Object();
-	public static final Lock jucLock = new ReentrantLock();
-	
-	public static AtomicInteger atoCounter = new AtomicInteger();
-	public static volatile int volCounter = -1;
+	private static final Object jvmLock = new Object();
+	private static final Lock jucLock = new ReentrantLock();
+	private static AtomicInteger atoCounter = new AtomicInteger(-1);
+	private static volatile int volCounter = -1;
 	
 	public Test(final int threadId, final CyclicBarrier barrier, final long iterationLimit, final int numThreads, final WorkloadType workloadType) {
 		this.barrier = barrier;
@@ -34,6 +33,7 @@ public class Test implements Runnable {
 		this.numThreads = numThreads;
 		this.threadId = threadId; 
 		this.workloadType = workloadType;
+		this.numberOfSegments = (int) (iterationLimit/SEGMENT_SIZE) - 1;
 	}
 	
 	public static void setupList(long iterations) {
@@ -42,7 +42,6 @@ public class Test implements Runnable {
 		for ( int i = 0; i < count; i++) {
 			list[i] = 0L;
 		}
-		NUMBER_OF_SEGMENTS = ((int) iterations / SEGMENT_SIZE)-1;
 	}
 	
 	public static void checkList(long iterations) {
@@ -51,20 +50,28 @@ public class Test implements Runnable {
 		for ( int i = 0; i < count; i++) {
 			if (list[i] != 1) {
 				w++;
-//				out.printf("value => %d \n", list[i]);
-//				throw new Error("can`t assert => " + i);
 			}
 		}
 		out.printf("value => %d \n", w);
 	}
 	
-	private static int getSegment() {
-		int count = atoCounter.get();
-		if (count < NUMBER_OF_SEGMENTS) {
-			return atoCounter.incrementAndGet() -1 ;
+	private int getSegment() {
+//		if (count < NUMBER_OF_SEGMENTS) {
+//			return ++count;
+//		} else {
+//			return -1;
+//		}
+		if ( atoCounter.get() < numberOfSegments ) {
+			return atoCounter.incrementAndGet();
 		} else {
 			return -1;
 		}
+//		if ( volCounter < NUMBER_OF_SEGMENTS ) {
+//			volCounter++;
+//			return volCounter;
+//		} else {
+//			return -1;
+//		}
 	}
 
 	@Override
@@ -86,17 +93,14 @@ public class Test implements Runnable {
 	
 	// 100% READ
 	private void workload1() {
-//		int start; 
-//		while ((start = getSegment()) != -1) {
-//			for ( int i = start; i < start+SEGMENT_SIZE; i++ ) {
-//				++list[i];
-//			}
-//		}
-//		int count = (int) (iterationLimit / numThreads);
-//		int start = count * threadId;
-//		for ( int i = start; i < start+count; i++ ) {
-//			++list[i];
-//		}
+		int start;
+		long temp = 0;
+		while ((start = getSegment()) != -1) {
+			start = start * SEGMENT_SIZE;
+			for ( int i = start; i < start+SEGMENT_SIZE; i++ ) {
+				temp = list[i];
+			}
+		}
 	}
 	
 	// 100% WRITE
@@ -112,31 +116,17 @@ public class Test implements Runnable {
 	
 	// 80% Read, 20% Write
 	private void workload3() {
-		int count = (int) (iterationLimit / numThreads);
-//		int start = (int)(Math.random() * ((iterationLimit - count) + 1));
-		for ( int i = 0; i < count; i++ ) {
-			++list[i];
-		}
+		
 	}
 	
 	// 20% Read, 80% Write
 	private void workload4() {
-		int count = (int) (iterationLimit / numThreads);
-		long temp = 0;
-		for ( int i = 0; i < count; i++ ) {
-			temp = list[i];
-		}
+		
 	}
 	
 	// 50% Read, 50% Write
 	private void workload5() {
-//		int count = (int) (iterationLimit / numThreads);
-//		int start = count * threadId;
-//		for ( int i = start; i < start+count; i++ ) {
-//			synchronized (jvmLock) {
-//				++list[i];
-//			}
-//		}
+
 	}
 
 }
