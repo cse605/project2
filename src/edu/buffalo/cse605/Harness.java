@@ -10,7 +10,7 @@ public class Harness {
   
   public enum WorkloadType {W1, W2, W3, W4, W5};
   
-  public static final int ITERATIONS = 1000 * 1000 * 1000; // 1 BIL
+  public static final int ITERATIONS = 100 * 1000 * 1000; // 1 BIL
   public static final int WARMUP_ITERATIONS = 1 * 1000 * 1000; //1 MIL
   private static WorkloadType workloadType;
   private static int numThreads;
@@ -42,6 +42,7 @@ public class Harness {
 	  
 	  switch ( workloadType ) {
 	      case W2:
+	      case W5:
 	    	  Test.checkList(ITERATIONS);
 	    	  break;
 	  }

@@ -24,8 +24,10 @@ public class Test implements Runnable {
 	
 	private static final Object jvmLock = new Object();
 	private static final Lock jucLock = new ReentrantLock();
-	private static AtomicInteger atoCounter = new AtomicInteger(-1);
 	private static volatile int volCounter = -1;
+	
+	private static AtomicInteger atoReadCounter = new AtomicInteger(-1);
+	private static AtomicInteger atoWriteCounter = new AtomicInteger(-1);
 	
 	public Test(final int threadId, final CyclicBarrier barrier, final long iterationLimit, final int numThreads, final WorkloadType workloadType) {
 		this.barrier = barrier;
@@ -55,14 +57,22 @@ public class Test implements Runnable {
 		out.printf("value => %d \n", w);
 	}
 	
-	private int getSegment() {
+	private int getWriteSegment() {
+		if ( atoWriteCounter.get() < numberOfSegments ) {
+			return atoWriteCounter.incrementAndGet();
+		} else {
+			return -1;
+		}
+	}
+	
+	private int getReadSegment() {
 //		if (count < NUMBER_OF_SEGMENTS) {
 //			return ++count;
 //		} else {
 //			return -1;
 //		}
-		if ( atoCounter.get() < numberOfSegments ) {
-			return atoCounter.incrementAndGet();
+		if ( atoReadCounter.get() < numberOfSegments ) {
+			return atoReadCounter.incrementAndGet();
 		} else {
 			return -1;
 		}
@@ -95,7 +105,7 @@ public class Test implements Runnable {
 	private void workload1() {
 		int start;
 		long temp = 0;
-		while ((start = getSegment()) != -1) {
+		while ((start = getReadSegment()) != -1) {
 			start = start * SEGMENT_SIZE;
 			for ( int i = start; i < start+SEGMENT_SIZE; i++ ) {
 				temp = list[i];
@@ -106,7 +116,7 @@ public class Test implements Runnable {
 	// 100% WRITE
 	private void workload2() {
 		int start;
-		while ((start = getSegment()) != -1) {
+		while ((start = getWriteSegment()) != -1) {
 			start = start * SEGMENT_SIZE;
 			for ( int i = start; i < start+SEGMENT_SIZE; i++ ) {
 				++list[i];
@@ -116,17 +126,83 @@ public class Test implements Runnable {
 	
 	// 80% Read, 20% Write
 	private void workload3() {
-		
+		if ( threadId % 5 != 0 ) {
+			int start;
+			long temp = 0;
+			while ((start = getWriteSegment()) != -1) {
+				start = start * SEGMENT_SIZE;
+				for ( int i = start; i < start+SEGMENT_SIZE; i++ ) {
+					// obviously, locks the entire list, which sucks ! (quite coarse grained)
+					synchronized(jvmLock) {
+						temp = list[i];
+					}
+				}
+			}
+		} else {
+			int start;
+			while ((start = getReadSegment()) != -1) {
+				start = start * SEGMENT_SIZE;
+				for ( int i = start; i < start+SEGMENT_SIZE; i++ ) {
+					synchronized(jvmLock) {
+						++list[i];
+					}
+				}
+			}
+		}
 	}
 	
 	// 20% Read, 80% Write
 	private void workload4() {
-		
+		if ( threadId % 5 == 0 ) {
+			int start;
+			long temp = 0;
+			while ((start = getWriteSegment()) != -1) {
+				start = start * SEGMENT_SIZE;
+				for ( int i = start; i < start+SEGMENT_SIZE; i++ ) {
+					// obviously, locks the entire list, which sucks ! (quite coarse grained)
+					synchronized(jvmLock) {
+						temp = list[i];
+					}
+				}
+			}
+		} else {
+			int start;
+			while ((start = getReadSegment()) != -1) {
+				start = start * SEGMENT_SIZE;
+				for ( int i = start; i < start+SEGMENT_SIZE; i++ ) {
+					synchronized(jvmLock) {
+						++list[i];
+					}
+				}
+			}
+		}	
 	}
 	
 	// 50% Read, 50% Write
 	private void workload5() {
-
+		if ( threadId % 2 == 0 ) {
+			int start;
+			long temp = 0;
+			while ((start = getWriteSegment()) != -1) {
+				start = start * SEGMENT_SIZE;
+				for ( int i = start; i < start+SEGMENT_SIZE; i++ ) {
+					// obviously, locks the entire list, which sucks ! (quite coarse grained)
+					synchronized(jvmLock) {
+						temp = list[i];
+					}
+				}
+			}
+		} else {
+			int start;
+			while ((start = getReadSegment()) != -1) {
+				start = start * SEGMENT_SIZE;
+				for ( int i = start; i < start+SEGMENT_SIZE; i++ ) {
+					synchronized(jvmLock) {
+						++list[i];
+					}
+				}
+			}
+		}
 	}
 
 }
