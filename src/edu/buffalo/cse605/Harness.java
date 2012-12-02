@@ -41,8 +41,9 @@ public class Harness {
 	  out.printf("%,d ops/s\n", (ITERATIONS * 1000000000L) / duration);
 	  
 	  switch ( workloadType ) {
-	      case W2:
-	      case W5:
+	      case W1:
+	    	  break;
+	      default:
 	    	  Test.checkList(ITERATIONS);
 	    	  break;
 	  }
