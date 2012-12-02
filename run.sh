@@ -1,0 +1,1 @@
+javac src/edu/buffalo/cse605/workloads/*.java src/edu/buffalo/cse605/*.java
