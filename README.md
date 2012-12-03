@@ -46,37 +46,30 @@ This benchmark aims to provide a baseline and a general overview on systems perf
 ### Test
 This test was performed on
 
-1. **Elements:** 100mil, 1 billion
+1. **Elements:** 1 billion
 2. **DataStructure:** Array
 3. **Threads:** 1,2,4,8,16,32,64
 
 ````
  # run.sh
-els=(100 1000)
 threads=(1 2 4 8 16 32 64)
 workloads=(W1 W2 W3 W4 W5)
 
  # warmup
-for e in "${els[@]}"; 
+for i in "${workloads[@]}"; 
 do
-	for i in "${workloads[@]}"; 
-	do
-		for j in "${threads[@]}"; 
-		do 
-	  		java -server edu.buffalo.cse605.Harness $i $e $j 1
-		done
+	for j in "${threads[@]}"; 
+	do 
+  		java -server edu.buffalo.cse605.Harness $i $e $j 1
 	done
 done
 
  # No warmup
-for e in "${els[@]}"; 
+for i in "${workloads[@]}"; 
 do
-	for i in "${workloads[@]}"; 
-	do
-		for j in "${threads[@]}"; 
-		do 
-	  		java -server edu.buffalo.cse605.Harness $i $e $j 1
-		done
+	for j in "${threads[@]}"; 
+	do 
+  		java -server edu.buffalo.cse605.Harness $i $e $j 0
 	done
 done
 ````
