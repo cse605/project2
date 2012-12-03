@@ -6,10 +6,11 @@ import java.util.concurrent.CyclicBarrier;
 
 import edu.buffalo.cse605.workloads.Default;
 import edu.buffalo.cse605.workloads.JUC;
+import edu.buffalo.cse605.workloads.JUCReadWrite;
 import edu.buffalo.cse605.workloads.JVM;
 
 public class Harness {
-  public enum TestType {DEFAULT, JVM, JUC};
+  public enum TestType {DEFAULT, JVM, JUC, JUCRW};
   public enum WorkloadType {W1, W2, W3, W4, W5};
   
   public static final int ITERATIONS = 100 * 1000 * 1000; // 1 BIL
@@ -40,6 +41,9 @@ public class Harness {
 			case JUC:
 				JUC.setupList(WARMUP_ITERATIONS);
 				break;
+			case JUCRW:
+				JUCReadWrite.setupList(WARMUP_ITERATIONS);
+				break;
 		  }
 		  for ( int i = 0; i < 10; i++) {
 			  runTest(numThreads, WARMUP_ITERATIONS);
@@ -55,6 +59,9 @@ public class Harness {
 			break;
 		case JUC:
 			JUC.setupList(ITERATIONS);
+			break;
+		case JUCRW:
+			JUCReadWrite.setupList(ITERATIONS);
 			break;
 	  }
 	  
@@ -79,6 +86,9 @@ public class Harness {
 		  		case JUC:
 		  			JUC.checkList(ITERATIONS);
 		  			break;
+		  		case JUCRW:
+					JUCReadWrite.setupList(ITERATIONS);
+					break;
 		  	  }
 	    	  break;
 	  }
@@ -103,6 +113,11 @@ public class Harness {
 				threads[i] = new Thread(new JUC(i, barrier, iterationLimit, numThreads, workloadType));
 			}
 		break;
+		case JUCRW:
+			for (int i = 0; i < numThreads; i++) {
+				threads[i] = new Thread(new JUCReadWrite(i, barrier, iterationLimit, numThreads, workloadType));
+			}
+			break;
     }
 
     for (Thread t : threads) {
