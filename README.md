@@ -61,18 +61,53 @@ Our goal was to understand the performance of different synchronization primitiv
 
 ### Benchmark Harness Design and Architecture
 
-[Architecture Diagram]
+<img src='https://dl.dropbox.com/u/32194349/architecture.png' />
 
 ##### 1. Micro Benchmark
 
-> Why Micro-Benchmarks ?
-> 
->1. Attempt to discover some narrow targeted fact
->2. Generally a timed tight loop around some “work”
->3. Report score as **iterations/sec** or **operations/sec** <br />
->		e.g. allocations/sec – object pooling vs GC
+Writing a benchmark test is very difficult. Most of the times, one writes a benchmark to measure some aspect of a system but ends up measuring either nothing or totally something else. Our quest to "design" an almost perfect micro-benchmarking solution for JVM apps led us to the following.
+ 
+> Micro Benchmarking Goal: Attempt to discover some narrow targeted fact
+ 
+1. Generally a timed tight loop around some 'work'
+2. Benchmark has to run > 10sec
+3. Launch the JVM many times
+4. Average out 'good' runs with the 'bad'
+5. Don't otherwise toss outliers
+6. Enough times to get statistically relevant results (require 30+ runs)
+7. Report score as **iterations/sec** or **operations/sec** <br />
+		e.g. allocations/sec – object pooling vs GC
 
-##### 2. Command Line Arguments
+##### 2. JVM Flag (-server)
+
+> Tests were ran with `-server` flag set.
+
+There are two types of the HotSpot JVM, namely `-server` and `-client`. The server VM uses a larger default size for the heap, a parallel garbage collector, and optimizes code more aggressively at run time. The client VM is more conservative, resulting in shorter startup time and lower memory footprint. Thanks to a concept called 'JVM ergonomics', the type of JVM is chosen automatically at JVM startup time based on certain criteria regarding the available hardware and operating system. The exact criteria can be found here. From the criteria table, we also see that the client VM is only available on 32-bit systems.
+
+If we are not happy with the pre-selected JVM, we can use the flags -server and -client to prescribe the usage of the server and client VM, respectively. Even though the server VM was originally targeted at long-running server processes, nowadays it often shows superior performance than the client VM in many standalone applications as well.
+
+[Graph] -server v/s -client
+
+##### 3. Warmup [On Stack Replacement (OSR)]
+
+> 1. Code starts interpreted, then JIT'd (JIT'd code is 10x faster than interpreter)
+> 2. JIT'ing happens 'after a while' <br/>
+> -HotSpot -server: 10,000 iterations<br />
+> -Plus compile time
+>3. Warmup code with some trial runs<br />
+> -Keeping testing until run-times stabilize
+>
+> *Dr. Cliff Click (Chief Architect JVM at Azul systems)*
+
+JVM will compile code to achieve greater performance based on runtime profiling.  Some VMs run an interpreter for the majority of code and replace hot areas with compiled code following the 80/20 rule (Hotspot). Other VMs compile all code simply at first then replace the simple code with more optimised code based on profiling (Azul VM).  
+
+Hotspot JVM will count invocations of a method return plus branch backs for loops in that method, and if this exceeds 10K in server mode the method will be compiled.  The compiled code on normal JIT'ing can be used when the method is next called.  However if a loop is still iterating it may make sense to replace the method before the loop completes, especially if it has many iterations to go.  OSR is the means by which a method gets replaced with a compiled version part way through iterating a loop.
+
+What this means is that you are likely to get better optimised code by doing a small number of shorter warm ups than a single large one.
+
+[Graph] -with warmup and without warmup
+
+##### 4. How to use the Harness
 ````
 $ java -server edu.buffalo.cse605.Harness <TESTTYPE> <WORKLOADTYPE> <NUMTHREADS> <WARMUP>
 
@@ -97,54 +132,25 @@ NUMTHREADS = INTEGER (1,2,4,8,16,32,64)
 WARMUP = 0 - No warmup; 1 - Warmup
 
 ````
-
-##### 3. JVM Flag (-server)
-
-> Tests were ran with `-server` flag set.
-
-There are two types of the HotSpot JVM, namely `-server` and `-client`. The server VM uses a larger default size for the heap, a parallel garbage collector, and optimizes code more aggressively at run time. The client VM is more conservative, resulting in shorter startup time and lower memory footprint. Thanks to a concept called 'JVM ergonomics', the type of JVM is chosen automatically at JVM startup time based on certain criteria regarding the available hardware and operating system. The exact criteria can be found here. From the criteria table, we also see that the client VM is only available on 32-bit systems.
-
-If we are not happy with the pre-selected JVM, we can use the flags -server and -client to prescribe the usage of the server and client VM, respectively. Even though the server VM was originally targeted at long-running server processes, nowadays it often shows superior performance than the client VM in many standalone applications as well.
-
-[Graph] -server v/s -client
-
-##### 4. Warmup [On Stack Replacement (OSR)]
-
-JVM will compile code to achieve greater performance based on runtime profiling.  Some VMs run an interpreter for the majority of code and replace hot areas with compiled code following the 80/20 rule.  Other VMs compile all code simply at first then replace the simple code with more optimised code based on profiling.  Oracle Hotspot and Azul are examples of the first type and Oracle JRockit is an example of the second.
-
-Hotspot JVM will count invocations of a method return plus branch backs for loops in that method, and if this exceeds 10K in server mode the method will be compiled.  The compiled code on normal JIT'ing can be used when the method is next called.  However if a loop is still iterating it may make sense to replace the method before the loop completes, especially if it has many iterations to go.  OSR is the means by which a method gets replaced with a compiled version part way through iterating a loop.
-
-What this means is that you are likely to get better optimised code by doing a small number of shorter warm ups than a single large one.
-
-[Graph] -with warmup and without warmup
-
+## Tests
 
 ### Lock Evaluation
 
 We start out with evaluating the locking schemes available in the JDK. JDK locks come with two implementations. One uses atomic CAS style instructions to manage the claim process.  CAS instructions tend to be the most expensive type of CPU instructions. Often locks are un-contended which gives rise to a possible optimisation whereby a lock can be biased to the un-contended thread using techniques to avoid the use of atomic instructions.  This biasing allows a lock in theory to be quickly reacquired by the same thread.  If the lock turns out to be contended by multiple threads the algorithm with revert from being biased and fall back to the standard approach using atomic instructions.
 
-#### Test 1
+#### Test 1: Increment counter using 3 major Lock Implementation
 
-For the test I shall increment a counter within a lock, and increase the number of contending threads on the lock.  This test will be repeated for the 3 major lock implementations available to Java:
-Atomic locking on Java language monitors
-Biased locking on Java language monitors
-ReentrantLock introduced with the java.util.concurrent package in Java 5.
+For thiks test, increment a counter within a lock, and increase the number of contending threads on the lock.  This test will be repeated for the 3 major lock implementations available to Java:
 
-This benchmark aims to provide a baseline and a general overview on systems performance varies based on various parameters and workloads as listed below. 
-
-##### Parameters
-
-1. Datastructure
-2. Number of Elements
-3. How many times the code is executed ( Hot Path)
-4. Number of threads
-
-> Note: This benchmark does not use any synchronization primitives.
+1. Atomic locking on Java language monitors
+2. Biased locking on Java language monitors
+3. UnBiased locking on Java language monitors
+3. ReentrantLock introduced with the java.util.concurrent package.
 
 ##### Test
 This test was performed on
 
-1. **Elements:** 1 billion
+1. **Elements:** 1 billion elements
 2. **DataStructure:** Array
 3. **Threads:** 1,2,4,8,16,32,64
 
@@ -173,15 +179,7 @@ done
 ````
 
 ##### Results
-CREAD, CWRIT
-DREAD, DWRIT
-// Need to put graphs
-
-##### Conclusion
-
-Based on previous results, scaling is linear till a particular number of threads.
-Performance is plateaued after a particular thread threshold is attained !
-
+[Graph]
 
 #### Test 2: Single Thread, multiple lock schemes.
  - Volatile
