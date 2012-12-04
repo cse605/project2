@@ -13,7 +13,7 @@ public class Harness {
   public enum TestType {DEFAULT, JVM, JUC, JUCRW};
   public enum WorkloadType {W1, W2, W3, W4, W5};
   
-  public static final int ITERATIONS = 100 * 1000 * 1000; // 1 BIL
+  public static final int ITERATIONS = 100 * 1000 * 1000; // 100mil
   public static final int WARMUP_ITERATIONS = 1000 * 1000; //1 MIL
   private static WorkloadType workloadType;
   private static TestType testType;
