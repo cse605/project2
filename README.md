@@ -13,7 +13,7 @@ Concurrency means when two or more tasks happen in parallel, it also means that 
 
 **Visibility of change** is about controlling when changes made to a shared resource are visible to other threads. 
 
-It is possible to avoid the need for mutual exclusion if the need for contended updates is eliminated. If your algorithm can guarantee that any given resource is modified by only one thread, then mutual exclusion is unnecessary. Read and write operations require that all changes are made visible to other threads. However only contended write operations require the mutual exclusion of the changes. 
+It is possible to avoid the need for mutual exclusion if the need for contended updates is eliminated. If an algorithm can guarantee that any given resource is modified by only one thread, then mutual exclusion is unnecessary. Read and write operations require that all changes are made visible to other threads. However only contended write operations require the mutual exclusion of the changes. 
 
 The most costly operation in any concurrent environment is a **contended write access**.  To have multiple threads write to the same resource requires complex and expensive coordination.  Typically this is achieved by employing a synchronization primitive.
 
@@ -42,9 +42,32 @@ Fast user mode locks can be employed but these are only of any real benefit when
 
 As show below,
 
-[Graph]
+<table>
+<tr>
+<th>Method</th><th>Time msec</th>
+</tr>
+<tr>
+<td>Single thread</td><td>300</td>
+</tr>
+<tr>
+<td>Single thread with lock</td><td>10,000</td>
+</tr>
+<tr>
+<td>Two threads with lock</td><td>224,000</td>
+</tr>
+<tr>
+<td>Single thread with CAS</td><td>5,700</td>
+</tr>
+<tr>
+<td>Two threads with CAS</td><td>30,000</td>
+</tr>
+<tr>
+<td>Single thread with volatile write</td><td>4,700</td>
+</tr>
+</table>
 
-// Talk about AtomicInteger, BiasedLock, UnbiasedLock, Reentrant Lock
+[Needs to be updated]
+
 <!--
 b) motivating scenario, what deployment and/or software system would benefit from the project
 c) implementation details -- structure of code, constraints, limitations
@@ -59,55 +82,273 @@ g) related work -- how does your project compare to other approaches
 
 Our goal was to understand the performance of different synchronization primitives and observe how various parameters have an impact on the overall throughput of the system. Thus it was necessary to develop a micro-benchmarking harness which would test the same, simple to configure and have the ability to be extended to accomodate more tests as and when needed. 
 
-### Benchmark Harness Design and Architecture
+### The JVM and Benchmark Harness Design and Architecture
 
 <img src='https://dl.dropbox.com/u/32194349/architecture.png' />
 
-##### 1. Micro Benchmark
+Writing a micro-benchmark to test a particular idiom is very difficult. Most of the times, one writes a benchmark to measure some aspect of a system but ends up measuring either nothing or something else. The JVM is very unpredictable and it is very important to understand how it works before diving into writing a micro-benchmark. 
 
-Writing a benchmark test is very difficult. Most of the times, one writes a benchmark to measure some aspect of a system but ends up measuring either nothing or totally something else. Our quest to "design" an almost perfect micro-benchmarking solution for JVM apps led us to the following.
+Our quest to "design" an almost perfect micro-benchmarking solution for JVM apps led us to discover some very important facets when writing a micro-benchmark to measure a particular idiom.
  
-> Micro Benchmarking Goal: Attempt to discover some narrow targeted fact
- 
-1. Generally a timed tight loop around some 'work'
-2. Benchmark has to run > 10sec
-3. Launch the JVM many times
-4. Average out 'good' runs with the 'bad'
-5. Don't otherwise toss outliers
-6. Enough times to get statistically relevant results (require 30+ runs)
-7. Report score as **iterations/sec** or **operations/sec** <br />
-		e.g. allocations/sec – object pooling vs GC
+> Micro Benchmarking Goal: Attempt to discover some narrow targeted fact.
 
-##### 2. JVM Flag (-server)
+##### 1. Dead Code Elimination
 
-> Tests were ran with `-server` flag set.
+"Dead code" is part of source code that compiler infers that its result is not used and does 
+not affect output of program. Optimizing compilers are adept at spotting dead code. Normally, benchmark programs often don't produce any output, which means some, or all, of the code can be optimized away without one realizing it, at which point one is measuring less execution than actually there is. In particular, many microbenchmarks perform much "better" when run with `-server` than with `-client`, not because the server compiler is faster (though it often is) but because the server compiler is more adept at optimizing away blocks of dead code. (More Explaination about `-server` and `-client` in the next section).
 
-There are two types of the HotSpot JVM, namely `-server` and `-client`. The server VM uses a larger default size for the heap, a parallel garbage collector, and optimizes code more aggressively at run time. The client VM is more conservative, resulting in shorter startup time and lower memory footprint. Thanks to a concept called 'JVM ergonomics', the type of JVM is chosen automatically at JVM startup time based on certain criteria regarding the available hardware and operating system. The exact criteria can be found here. From the criteria table, we also see that the client VM is only available on 32-bit systems.
 
-If we are not happy with the pre-selected JVM, we can use the flags -server and -client to prescribe the usage of the server and client VM, respectively. Even though the server VM was originally targeted at long-running server processes, nowadays it often shows superior performance than the client VM in many standalone applications as well.
+````
+// Shows how the compiler optimizes dead code
+// StupidThreadTest.java
 
-[Graph] -server v/s -client
+package edu.buffalo.cse605;
 
-##### 3. Warmup [On Stack Replacement (OSR)]
+public class StupidThreadTest {
+    private static int nThreads;
+    
+    public static double doSomeStuff() {
+        double uselessSum = 0;
+        for (int i=0; i<1000; i++) {
+            for (int j=0;j<1000; j++) {
+                uselessSum += (double) i + (double) j;
+            }
+        }
+        
+        return 0;
+//      return uselessSum; -> This line makes all the difference
+    }
 
-> 1. Code starts interpreted, then JIT'd (JIT'd code is 10x faster than interpreter)
-> 2. JIT'ing happens 'after a while' <br/>
-> -HotSpot -server: 10,000 iterations<br />
-> -Plus compile time
->3. Warmup code with some trial runs<br />
-> -Keeping testing until run-times stabilize
->
-> *Dr. Cliff Click (Chief Architect JVM at Azul systems)*
+    public static void main(String[] args) throws InterruptedException {
+    	doSomeStuff();
+        
+        nThreads = Integer.parseInt(args[0]);
+        
+        Thread[] threads = new Thread[nThreads];
+        
+        for (int i=0; i<nThreads; i++) {
+        	threads[i] = new Thread(new Runnable() {
+        		public void run() { 
+        			doSomeStuff(); 
+        		}
+        	});
+        }
+        
+        final long start = System.currentTimeMillis();
+        for (int i = 0; i < threads.length; i++)
+            threads[i].start();
+        for (int i = 0; i < threads.length; i++)
+            threads[i].join();
+        final long end = System.currentTimeMillis();
+        System.out.println("Time: " + (end-start) + "ms");
+    }
+}
+
+````
+
+````
+// Output with 'return 0;' enabled
+$ java -server -XX:+PrintCompilation edu.buffalo.cse605.StupidThreadTest 1000
+    107   1       java.lang.String::hashCode (64 bytes)
+    160   2       sun.nio.cs.UTF_8$Decoder::decodeArrayLoop (553 bytes)
+    173   3       java.math.BigInteger::mulAdd (81 bytes)
+    178   4       java.math.BigInteger::multiplyToLen (219 bytes)
+    184   5       java.math.BigInteger::addOne (77 bytes)
+    188   6       java.math.BigInteger::squareToLen (172 bytes)
+    190   7       java.math.BigInteger::primitiveLeftShift (79 bytes)
+    196   8       java.math.BigInteger::montReduce (99 bytes)
+    219   9       sun.security.provider.SHA::implCompress (491 bytes)
+    236  10       java.lang.String::charAt (33 bytes)
+    237   1%      edu.buffalo.cse605.StupidThreadTest::doSomeStuff @ 12 (42 bytes)
+    242  11       java.lang.Object::<init> (1 bytes)
+    249  12       java.lang.ThreadLocal$ThreadLocalMap::<init> (148 bytes)
+    256  13       edu.buffalo.cse605.StupidThreadTest::doSomeStuff (42 bytes)
+Time: 110ms
+````
+
+````
+// Output with 'return uselessSum;' enabled
+$ java -server -XX:+PrintCompilation edu.buffalo.cse605.StupidThreadTest 1000
+    106   1       java.lang.String::hashCode (64 bytes)
+    160   2       sun.nio.cs.UTF_8$Decoder::decodeArrayLoop (553 bytes)
+    171   3       java.math.BigInteger::mulAdd (81 bytes)
+    175   4       java.math.BigInteger::multiplyToLen (219 bytes)
+    182   5       java.math.BigInteger::addOne (77 bytes)
+    186   6       java.math.BigInteger::squareToLen (172 bytes)
+    187   7       java.math.BigInteger::primitiveLeftShift (79 bytes)
+    191   1%      java.math.BigInteger::multiplyToLen @ 138 (219 bytes)
+    209   8       java.math.BigInteger::montReduce (99 bytes)
+    219   9       sun.security.provider.SHA::implCompress (491 bytes)
+    248  10       java.lang.String::charAt (33 bytes)
+    249   2%      edu.buffalo.cse605.StupidThreadTest::doSomeStuff @ 12 (42 bytes)
+    263  11       java.lang.Object::<init> (1 bytes)
+    267  12       java.lang.ThreadLocal$ThreadLocalMap::<init> (148 bytes)
+    275  13       edu.buffalo.cse605.StupidThreadTest::doSomeStuff (42 bytes)
+Time: 978ms
+````
+
+**Conclusion : ** As from the above example, JVM decides to do optimization by eliminating dead code and thus there is a 10x performance difference by a mere `return` statement.
+
+##### 2. JVM Modes (-server and -client)
+
+There are two types of the HotSpot JVM, namely `-server` and `-client`. The server VM uses a larger default size for the heap, a parallel garbage collector, and optimizes code more aggressively at run time. The client VM is more conservative, resulting in shorter startup time and lower memory footprint. Thanks to a concept called 'JVM ergonomics', the type of JVM is chosen automatically at JVM startup time based on certain criteria regarding the available hardware and operating system.
+
+##### 3. Warmup
 
 JVM will compile code to achieve greater performance based on runtime profiling.  Some VMs run an interpreter for the majority of code and replace hot areas with compiled code following the 80/20 rule (Hotspot). Other VMs compile all code simply at first then replace the simple code with more optimised code based on profiling (Azul VM).  
 
-Hotspot JVM will count invocations of a method return plus branch backs for loops in that method, and if this exceeds 10K in server mode the method will be compiled.  The compiled code on normal JIT'ing can be used when the method is next called.  However if a loop is still iterating it may make sense to replace the method before the loop completes, especially if it has many iterations to go.  OSR is the means by which a method gets replaced with a compiled version part way through iterating a loop.
+Hotspot JVM will count invocations of a method return plus branch backs for loops in that method, and if this exceeds 10K in server mode the method will be compiled. The compiled code on normal JIT'ing can be used when the method is next called.
 
-What this means is that you are likely to get better optimised code by doing a small number of shorter warm ups than a single large one.
+What this means is that, one is likely to get better optimised code by doing a small number of shorter warm ups than a single large one.
 
-[Graph] -with warmup and without warmup
+> NOTE: When using thin locks (Atomic), it is important to create new primitive object after every warmup run. Although warm up aids in compiling "hot code" paths, it may force the JVM to convert the thin locks into fat locks leading to performance drops.
 
-##### 4. How to use the Harness
+````
+// With Warmup
+$ java -server -XX:+PrintCompilation -verbose:gc edu.buffalo.cse605.TestLocks ATO 2 1
+Warmup
+    131    1             java.util.concurrent.atomic.AtomicLong::getAndIncrement (23 bytes)
+    131    2     n       sun.misc.Unsafe::compareAndSwapLong (0 bytes)   
+    131    3     n       sun.misc.Unsafe::compareAndSwapLong (0 bytes)   
+    132    4             java.util.concurrent.atomic.AtomicLong::compareAndSet (13 bytes)
+    137    5             java.util.concurrent.atomic.AtomicLong::get (5 bytes)
+    140    1 %           edu.buffalo.cse605.TestLocks::atoInc @ 15 (34 bytes)
+    151    6             edu.buffalo.cse605.TestLocks::atoInc (34 bytes)
+2 threads, duration 73,556,175,000 (ns)
+147 ns/op
+6,797,525 ops/s
+counter = 500000000
+````
+
+
+````
+// Without Warmup
+$ java -server -XX:+PrintCompilation -verbose:gc edu.buffalo.cse605.TestLocks ATO 2 0
+    126    1             java.util.concurrent.atomic.AtomicLong::getAndIncrement (23 bytes)
+    126    2     n       sun.misc.Unsafe::compareAndSwapLong (0 bytes)   
+    127    3     n       sun.misc.Unsafe::compareAndSwapLong (0 bytes)   
+    127    4             java.util.concurrent.atomic.AtomicLong::compareAndSet (13 bytes)
+    133    5             java.util.concurrent.atomic.AtomicLong::get (5 bytes)
+    136    1 %           edu.buffalo.cse605.TestLocks::atoInc @ 15 (34 bytes)
+2 threads, duration 48,962,594,000 (ns)
+97 ns/op
+10,211,877 ops/s
+counter = 500000000
+````
+
+````
+// after ensuring that AtomicLong was created after every warmup run
+$ java -server -XX:+PrintCompilation -verbose:gc edu.buffalo.cse605.TestLocks ATO 2 1
+Warmup
+   124    1             java.util.concurrent.atomic.AtomicLong::getAndIncrement (23 bytes)
+   124    2     n       sun.misc.Unsafe::compareAndSwapLong (0 bytes)   
+   124    3     n       sun.misc.Unsafe::compareAndSwapLong (0 bytes)   
+   125    4             java.util.concurrent.atomic.AtomicLong::compareAndSet (13 bytes)
+   131    5             java.util.concurrent.atomic.AtomicLong::get (5 bytes)
+   133    1 %           edu.buffalo.cse605.TestLocks::atoInc @ 15 (34 bytes)
+   145    6             edu.buffalo.cse605.TestLocks::atoInc (34 bytes)
+2 threads, duration 53,821,730,000 (ns)
+107 ns/op
+9,289,928 ops/s
+counter = 500000000
+````
+##### 4. On-Stack Replacement [OSR]
+
+With the context of "Warmup" i.e compiling hot code instead of JITing, if a loop is still iterating it may make sense to replace the method before the loop completes, especially if it has many iterations to go.  On Stack Replacement [OSR] is the means by which a method gets replaced with a compiled version part way through iterating a loop.
+
+Although OSR sounds fantastic, it 'sometimes' cannot do loop-hoisting, array-bounds check elimination, or loop unrolling. Thus it is better to structure code in such a away that OSR
+
+````
+// Program
+
+package edu.buffalo.cse605;
+
+import static java.lang.System.out;
+public class OSR {
+
+	private static final int[] array = new int[10 * 1000];
+	private static final long ITERATIONS = 1000 * 10000;
+	static {
+	    for (int i = 0; i < array.length; i++) {
+	        array[i] = i;
+	    }
+	}
+
+	public static void main(String[] args) {
+		 int osr = Integer.parseInt(args[0]); 
+	    long t1 = System.nanoTime();
+	    long result = 0;
+	   
+	    if ( osr == 1)  {
+		    for (int i = 0; i < 1000 * 1000; i++) {    // outer loop
+		        for (int j = 0; j < array.length; j++) {    // inner loop 1
+		            result += array[j];
+		        }
+		        for (int j = 0; j < array.length; j++) {    // inner loop 2
+		            result ^= array[j];
+		        }
+		    }
+	    } else {
+		    for (int i = 0; i < ITERATIONS; i++) {    // sole loop
+		        result = add(result);
+		        result = xor(result);
+		    }
+		 }
+
+
+	    long t2 = System.nanoTime();
+	    System.out.println("Execution time: " + ((t2 - t1) * 1e-9) +
+	        " seconds to compute result = " + result);
+		out.printf("%,d ns/op\n", (t2 - t1) / (ITERATIONS * array.length));
+		out.printf("%,d ops/s\n", (ITERATIONS * array.length * 1000000000L) / (t2 - t1));
+	}
+	
+	private static long add(long result) {    // method extraction of inner loop 1
+	    for (int j = 0; j < array.length; j++) {
+	        result += array[j];
+	    }
+	    return result;
+	}
+	
+	private static long xor(long result) {    // method extraction of inner loop 2
+	    for (int j = 0; j < array.length; j++) {
+	        result ^= array[j];
+	    }
+	    return result;
+	}
+}
+````
+
+````
+// OSR
+$ java -server -XX:+PrintCompilation -verbose:gc edu.buffalo.cse605.OSR 1
+    131    1 %           edu.buffalo.cse605.OSR::main @ 18 (196 bytes)
+ 142326    1 %           edu.buffalo.cse605.OSR::main @ -2 (196 bytes)   made not entrant
+Execution time: 142.19685800000002 seconds to compute result = 499950000000000
+1 ns/op
+54,616,394 ops/s
+````
+
+
+````
+// NO OSR
+$ java -server -XX:+PrintCompilation -verbose:gc edu.buffalo.cse605.OSR 0
+    130    1             edu.buffalo.cse605.NOOSR::add (27 bytes)
+    130    2             edu.buffalo.cse605.NOOSR::xor (27 bytes)
+    139    1 %           edu.buffalo.cse605.NOOSR::xor @ 5 (27 bytes)
+    380    2 %           edu.buffalo.cse605.NOOSR::main @ 12 (150 bytes)
+ 147839    2 %           edu.buffalo.cse605.NOOSR::main @ -2 (150 bytes)   made not entrant
+Execution time: 147.71015500000001 seconds to compute result = 499950000000000
+1 ns/op
+52,577,831 ops/s
+````
+
+
+##### 5. Deoptimization
+
+The JVM can stop using a compiled method and return to interpreting it for a while before recompiling it. This can happen when assumptions made by an optimizing dynamic compiler have become outdated. One example is class loading that invalidates monomorphic call transformations. Another example is uncommon traps: when a code block is initially compiled, only the most likely code path is compiled, while atypical branches (such as exception paths) are left interpreted. But if the uncommon traps turn out to be commonly executed, then they become hotspot paths that trigger recompilation.
+
+### Using the Harness
 ````
 $ java -server edu.buffalo.cse605.Harness <TESTTYPE> <WORKLOADTYPE> <NUMTHREADS> <WARMUP>
 
@@ -134,27 +375,130 @@ WARMUP = 0 - No warmup; 1 - Warmup
 ````
 ## Tests
 
+After a fair understanding on how to write Micro-Benchmarks, 
+
 ### Lock Evaluation
 
 We start out with evaluating the locking schemes available in the JDK. JDK locks come with two implementations. One uses atomic CAS style instructions to manage the claim process.  CAS instructions tend to be the most expensive type of CPU instructions. Often locks are un-contended which gives rise to a possible optimisation whereby a lock can be biased to the un-contended thread using techniques to avoid the use of atomic instructions.  This biasing allows a lock in theory to be quickly reacquired by the same thread.  If the lock turns out to be contended by multiple threads the algorithm with revert from being biased and fall back to the standard approach using atomic instructions.
 
-#### Test 1: Increment counter using 3 major Lock Implementation
+#### Test 0: Increment shared counter
 
-For thiks test, increment a counter within a lock, and increase the number of contending threads on the lock.  This test will be repeated for the 3 major lock implementations available to Java:
+In this test, we increment a counter within a lock, and increase the number of contending threads on the lock.  This test is repeated for the 3 major lock implementations available to Java:
 
 1. Atomic locking on Java language monitors
 2. Biased locking on Java language monitors
-3. UnBiased locking on Java language monitors
 3. ReentrantLock introduced with the java.util.concurrent package.
 
-##### Test
-This test was performed on
+##### Setup
 
-1. **Elements:** 1 billion elements
-2. **DataStructure:** Array
+1. **Iterations:** 1 Billion
+2. **Data:** Counter
 3. **Threads:** 1,2,4,8,16,32,64
 
+##### Code
+
 ````
+// [TestLocks.java]
+````
+
+##### Results
+<img src='https://dl.dropbox.com/u/32194349/Graph%200.png' />
+
+##### Conclusion
+
+// TODO
+
+
+#### Test 1: Single Thread Performance for various locking schemes.
+
+In this test, we determine the single thread performance of various locking schemes viz.
+
+1. Volatile
+2. AtomicLong (CAS)
+3. JVM Locks (Effect of Biased/Unbiased Locking)
+4. JUC Locks (Reentrant lock)
+
+##### Setup
+
+1. **Iterations:** 1 Billion
+2. **Data:** Counter
+3. **Threads:** 1,2,4,8,16,32,64
+
+##### Code
+````
+[TestLocks.java]
+````
+
+##### Results
+
+<table>
+<tr>
+<th>Method</th>
+<th>Method (Without Warmup)</th>
+<th>Method (With Warmup)</th>
+<th>% compared to Normal</th>
+</tr>
+<tr>
+<td>Normal</td>
+<td>516,866,383</td>
+<td>580,879,311</td>
+<td>n/a</td>
+</tr>
+<tr>
+<td>Volatile</td>
+<td>36,364,547</td>
+<td>32,720,340</td>
+<td>18X drop</td>
+</tr>
+<tr>
+<td>ATO</td>
+<td>38,507,808</td>
+<td>38,314,857</td>
+<td>15X drop</td>
+</tr>
+<tr>
+<td>JVM</td>
+<td>18,256,106</td>
+<td>17,337,213</td>
+<td>34X drop</td>
+</tr>
+<tr>
+<td>JVM (+Biased)</td>
+<td>167,927,071</td>
+<td>177,511,904</td>
+<td>3X drop</td>
+</tr>
+<tr>
+<td>JUC</td>
+<td>18,019,544</td>
+<td>18,058,368</td>
+<td>32X drop</td>
+</tr>
+</table>
+
+##### Conclusion
+
+// TODO
+
+#### Test 3: Biased/Unbiased Locking JVM Warmup Test
+
+Test Biased/Unbiased Locking Performance 
+
+1. contention/no contention on resources
+2. with warmup/non-warmup.
+
+The testing framework included
+
+1. 100, 1000 mil elements
+2. synchronized method on Object (every iteration of the loop)
+3. Biased Locking and Unbiased Locking
+
+
+### Conclusion
+
+
+
+<!--````
  # run.sh
 threads=(1 2 4 8 16 32 64)
 workloads=(W1 W2 W3 W4 W5)
@@ -177,32 +521,4 @@ do
 	done
 done
 ````
-
-##### Results
-[Graph]
-
-#### Test 2: Single Thread, multiple lock schemes.
- - Volatile
- - AtomicInteger
- - JVM Locks (Effect of Biased/Unbiased Locking)
- - JUC Locks (re entrant locks)
-
-
-
-#### Test 3: Biased/Unbiased Locking JVM Warmup Test
-
-Test Biased/Unbiased Locking Performance 
-
-1. contention/no contention on resources
-2. with warmup/non-warmup.
-
-The testing framework included
-
-1. 100, 1000 mil elements
-2. synchronized method on Object (every iteration of the loop)
-3. Biased Locking and Unbiased Locking
-
-
-### Conclusion
-
-
+-->
