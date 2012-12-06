@@ -414,7 +414,7 @@ In this test, we increment a counter within a lock, and increase the number of c
 ````
 
 ##### Results
-<img src='https://dl.dropbox.com/u/32194349/Graph%200.png' />
+<img src='http://dl.dropbox.com/u/32194349/Graph%200.png' />
 
 ##### Conclusion
 
@@ -490,8 +490,8 @@ In this test, we determine the single thread performance of various locking sche
 
 ##### Graph
 
-<img src='https://dl.dropbox.com/u/32194349/Graph%201.png' />
-<img src='https://dl.dropbox.com/u/32194349/Graph%202.png' />
+<img src='http://dl.dropbox.com/u/32194349/Graph%201.png' />
+<img src='http://dl.dropbox.com/u/32194349/Graph%202.png' />
 
 ##### Conclusion
 
@@ -563,8 +563,8 @@ Similar to the previous test, in this test, we determine the  performance of var
 
 ##### Graph
 
-<img src='https://dl.dropbox.com/u/32194349/Graph%203.png' />
-<img src='https://dl.dropbox.com/u/32194349/Graph%204.png' />
+<img src='http://dl.dropbox.com/u/32194349/Graph%203.png' />
+<img src='http://dl.dropbox.com/u/32194349/Graph%204.png' />
 
 ### Conclusion
  // TODO
@@ -576,7 +576,7 @@ Now that we have a fair understanding of some important factors to consider when
 
 #### Benchmark Harness Architecture
 
-<img src='https://dl.dropbox.com/u/32194349/architecture.png' />
+<img src='http://dl.dropbox.com/u/32194349/architecture.png' />
 
 **Data Strucuture**: Array, 1 billion Elements
 
@@ -621,24 +621,7 @@ NUMTHREADS = INTEGER (1,2,4,8,16,32,64)
 WARMUP = 0 - No warmup; 1 - Warmup
 ````
 
-#### Test 1: Workload Performance without any synchronization primitives
-
-<img src='https://dl.dropbox.com/u/32194349/Graph%205.png' />
-
-
-#### Test 2a: Workload Performance with JVM (Sync) Locking
-
-<img src='https://dl.dropbox.com/u/32194349/Graph%206.png' />
-
-<img src='https://dl.dropbox.com/u/32194349/Graph%207.png' />
-
-#### Test 2b: Workload Performance with Biased JVM (Sync) Locking
-
-<img src='https://dl.dropbox.com/u/32194349/Graph%208.png' />
-
-<img src='https://dl.dropbox.com/u/32194349/Graph%209.png' />
-
-<!--````
+````
  # run.sh
 threads=(1 2 4 8 16 32 64)
 workloads=(W1 W2 W3 W4 W5)
@@ -661,7 +644,43 @@ do
   done
 done
 ````
--->
+
+#### Test 1: Workload Performance without any synchronization primitives
+
+<img src='http://dl.dropbox.com/u/32194349/Graph%205.png' />
+
+
+#### Test 2a: Workload Performance with JVM (Sync) Locking
+
+<img src='http://dl.dropbox.com/u/32194349/Graph%206.png' />
+
+<img src='http://dl.dropbox.com/u/32194349/Graph%207.png' />
+
+#### Test 2b: Workload Performance with Biased JVM (Sync) Locking
+
+<img src='http://dl.dropbox.com/u/32194349/Graph%208.png' />
+
+<img src='http://dl.dropbox.com/u/32194349/Graph%209.png' />
+
+#### Test 3: Workload Performance with JUC (Reentrant) Locking
+
+<img src='http://dl.dropbox.com/u/32194349/Graph%2010.png' />
+
+<img src='http://dl.dropbox.com/u/32194349/Graph%2011.png' />
+
+#### Test 3: Workload Performance with JUC (Reentrant) Locking
+
+<img src='http://dl.dropbox.com/u/32194349/Graph%2010.png' />
+
+<img src='http://dl.dropbox.com/u/32194349/Graph%2011.png' />
+
+#### Test 4: Workload Performance with JUC (ReadWrite) Locking
+
+<img src='http://dl.dropbox.com/u/32194349/Graph%2012.png' />
+
+<img src='http://dl.dropbox.com/u/32194349/Graph%2013.png' />
+
+## Conclusion
 
 
 ## References
