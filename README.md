@@ -1,6 +1,6 @@
 # Measuring impact of sychronization primitives in highly concurrent systems
 
-Data synchronization is the core essential for writing concurrent programs. Ideally, a synchronization technique should be able to fully exploit the available cores, leading to improved performance. This study investigates aspects of synchronization and co-ordination for large concurrent systems. But before diving into that, this study also investigates best methodologies to perform micro benchmarking in the JVM.
+Data synchronization is the core essential for writing concurrent programs. Ideally, a synchronization technique should be able to fully exploit the available cores, leading to improved performance. This study investigates aspects of synchronization and co-ordination for large concurrent systems. But before diving into that, this study also validates and aggregates some of the best methodologies to perform micro benchmarking in the JVM as found from various journals and studies.
 
 ## Complexitities involving Concurrency
 
@@ -37,7 +37,7 @@ In addition to the raw overhead of entering and leaving locks, as the number of 
 
 Fast user mode locks can be employed but these are only of any real benefit when not contended. The actual processors provide several instructions that simplify greatly the implementation of these non-blocking algorithms, the most-used operation today is the compare-and-swap operation (CAS). This operation takes three parameters, the memory address, the expected current value and the new value. It atomically update the value at the given memory address if the current value is the expected, otherwise it do nothing. In both cases, the operation return the value at the address after the operation execution. So when several threads try to execute the CAS operation, one thread wins and the others do nothing. So the caller can choose to retry or to do something else. 
 
-As show below,
+According to a white paper<sup>[1]</sup> presented by the folks at LMAX who developed Disrupter - A high performance alternative to bounded queue for exchanging data.
 
 <table>
 <tr>
@@ -84,14 +84,14 @@ We wish to understand the intrinsic performance properties of a specific lock im
 Writing a micro-benchmark to test a particular idiom is very difficult. Most of the times, one writes a benchmark to measure some aspect of a system but ends up measuring either nothing or something else. The JVM is highly unpredictable and it is very important to understand some important facets about the runtime before writing a single line of benchmarking code.
 Micro benchmarking is also very different than profiling! When profiling, one works with an entire application, either in production or in an environment which resembles production as much as possible. 
 
-As we went ahead to write a "good" micro-benchmarking solution for our use case, we stumbled upon some very interesting  which in turn led us to some  when writing a micro-benchmark to measure a particular idiom.
+We wanted a "good" micro-benchmarking solution for our use case. After extensive study on previous research material from various authors, we aggregated and validated some of the most important factors which influence a good measurement study.
 
 ##### 1. Dead Code Elimination
 
 "Dead code" is part of source code that compiler infers that its result is not used and does 
 not affect output of program. Optimizing compilers are adept at spotting dead code. Normally, benchmark programs often don't produce any output, which means some, or all, of the code can be optimized away without one realizing it, at which point one is measuring less execution than actually there is.
 
-Consider the following code <sup>[1]</sup>, where `doSomeStuff()` runs nested `for` loops to calculate the sum of the iterations. 
+Consider Listing 1<sup>[2]</sup>, where `doSomeStuff()` runs nested `for` loops to calculate the sum of the iterations. 
 The `doSomeStuff()` method is supposed to give the threads something to do, so we can infer something about the scheduling overhead of multiple threads from the run time of `StupidThreadBenchmark`. However, the compiler can determine that all the code in `doSomeStuff` is dead, and optimize it all away because `uselessSum` is never used. Once the code inside the loop goes away, the loops can go away, too, leaving `doSomeStuff()` entirely empty !
 
 ````
@@ -253,7 +253,7 @@ counter = 500000000
 
 With the context of "Warmup" i.e compiling hot code instead of JITing, if a loop is still iterating it may make sense to replace the method before the loop completes, especially if it has many iterations to go.  On Stack Replacement [OSR] is the means by which a method gets replaced with a compiled version part way through iterating a loop.
 
-Although OSR sounds fantastic, it **sometimes** (< JDK 7) cannot do loop-hoisting, array-bounds check elimination, or loop unrolling.
+The effects are illustrated in Listing 2 <sup>[3]</sup>
 
 ````
 // Listing 2: Test the effects of OSR
@@ -364,7 +364,7 @@ public class Inline {
 }
 ````
 
-Listing 3 [] shows an example of the type of optimization that is enabled through inlining. The outer() method calls inner() with an argument of null, which will result in inner() doing nothing. But by inlining the call to inner(), the compiler can see that the else branch of inner() is dead code, and can optimize the test and the else branch away, at which point it can optimize away the entirety of the call to inner(). Had inner() not been inlined, this optimization would not have been possible.
+Listing 3 <sup></sup> shows an example of the type of optimization that is enabled through inlining. The outer() method calls inner() with an argument of null, which will result in inner() doing nothing. But by inlining the call to inner(), the compiler can see that the else branch of inner() is dead code, and can optimize the test and the else branch away, at which point it can optimize away the entirety of the call to inner(). Had inner() not been inlined, this optimization would not have been possible.
 
 ##### 6. JVM options
 
@@ -423,7 +423,8 @@ After a fair understanding on how to write Micro-Benchmarks,
 
 ### Lock Evaluation
 
-We start out with evaluating the locking schemes available in the JDK. JDK locks come with two implementations. One uses atomic CAS style instructions to manage the claim process.  CAS instructions tend to be the most expensive type of CPU instructions. Often locks are un-contended which gives rise to a possible optimisation whereby a lock can be biased to the un-contended thread using techniques to avoid the use of atomic instructions.  This biasing allows a lock in theory to be quickly reacquired by the same thread.  If the lock turns out to be contended by multiple threads the algorithm with revert from being biased and fall back to the standard approach using atomic instructions.
+We start out with evaluating the locking schemes available in the JDK. 
+> CAS instructions tend to be the most expensive type of CPU instructions (architecture dependent). Locks are often un-contended which gives rise to a possible optimization whereby a lock can be biased to the un-contended thread using techniques to avoid the use of atomic instructions. This biasing allows a lock in theory to be quickly reacquired by the same thread. If the lock turns out to be contended by multiple threads the algorithm with revert from being biased and fall back to the standard approach using atomic instructions.
 
 #### Test 0: Increment shared counter
 
@@ -629,4 +630,6 @@ done
 
 ## References
 
-[1]: http://www.ibm.com/developerworks/java/library/j-jtp12214/
+[1]: http://lmax-exchange.github.com/disruptor/files/Disruptor-1.0.pdf
+[2]: http://www.ibm.com/developerworks/java/library/j-jtp12214/
+[3]: http://www.ibm.com/developerworks/java/library/j-benchmark1/index.html
