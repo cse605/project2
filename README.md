@@ -1,6 +1,6 @@
 # Measuring impact of sychronization primitives in highly concurrent systems
 
-Data synchronization is the core essential for writing concurrent programs. Ideally, a synchronization technique should be able to fully exploit the available cores, leading to improved performance. This study investigates aspects of synchronization and co-ordination for large scale concurrent systems.
+Data synchronization is the core essential for writing concurrent programs. Ideally, a synchronization technique should be able to fully exploit the available cores, leading to improved performance. This study investigates aspects of synchronization and co-ordination for large concurrent systems. But before diving into that, this study also investigates best methodologies to perform micro benchmarking in the JVM.
 
 ## Complexitities involving Concurrency
 
@@ -9,7 +9,7 @@ Concurrency means when two or more tasks happen in parallel, it also means that 
 1. Mutual exclusion
 2. Visibility of change
 
-**Mutual exclusion** is about protecting shared resources from being arbitrarily acessed by managing contended updates it.
+**Mutual exclusion** is about protecting shared resources from being arbitrarily accessed by managing contended updates it.
 
 **Visibility of change** is about controlling when changes made to a shared resource are visible to other threads. 
 
@@ -24,9 +24,6 @@ The most costly operation in any concurrent environment is a **contended write a
 3. RWLock - Read/Write Lock
 4. Condition Variables
 5. Monitors
-
-[Do I need to explain ?]
-
 
 ### Cost of Locks
 
@@ -66,8 +63,6 @@ As show below,
 </tr>
 </table>
 
-[Needs to be updated]
-
 <!--
 b) motivating scenario, what deployment and/or software system would benefit from the project
 c) implementation details -- structure of code, constraints, limitations
@@ -80,26 +75,27 @@ g) related work -- how does your project compare to other approaches
 
 ## Benchmark
 
-Our goal was to understand the performance of different synchronization primitives and observe how various parameters have an impact on the overall throughput of the system. Thus it was necessary to develop a micro-benchmarking harness which would test the same, simple to configure and have the ability to be extended to accomodate more tests as and when needed. 
+We wish to understand the intrinsic performance properties of a specific lock implementation in different scenarios.
 
-### The JVM and Benchmark Harness Design and Architecture
+### Enter (Micro) benchmark
 
-<img src='https://dl.dropbox.com/u/32194349/architecture.png' />
+>  **microbenchmark** attempts to measure the performance of a "small" bit of code. These tests are typically in the sub-millisecond range. The code being tested usually performs no I/O, or else is a test of some single, specific I/O task.
 
-Writing a micro-benchmark to test a particular idiom is very difficult. Most of the times, one writes a benchmark to measure some aspect of a system but ends up measuring either nothing or something else. The JVM is very unpredictable and it is very important to understand how it works before diving into writing a micro-benchmark. 
+Writing a micro-benchmark to test a particular idiom is very difficult. Most of the times, one writes a benchmark to measure some aspect of a system but ends up measuring either nothing or something else. The JVM is highly unpredictable and it is very important to understand some important facets about the runtime before writing a single line of benchmarking code.
+Micro benchmarking is also very different than profiling! When profiling, one works with an entire application, either in production or in an environment which resembles production as much as possible. 
 
-Our quest to "design" an almost perfect micro-benchmarking solution for JVM apps led us to discover some very important facets when writing a micro-benchmark to measure a particular idiom.
- 
-> Micro Benchmarking Goal: Attempt to discover some narrow targeted fact.
+As we went ahead to write a "good" micro-benchmarking solution for our use case, we stumbled upon some very interesting  which in turn led us to some  when writing a micro-benchmark to measure a particular idiom.
 
 ##### 1. Dead Code Elimination
 
 "Dead code" is part of source code that compiler infers that its result is not used and does 
-not affect output of program. Optimizing compilers are adept at spotting dead code. Normally, benchmark programs often don't produce any output, which means some, or all, of the code can be optimized away without one realizing it, at which point one is measuring less execution than actually there is. In particular, many microbenchmarks perform much "better" when run with `-server` than with `-client`, not because the server compiler is faster (though it often is) but because the server compiler is more adept at optimizing away blocks of dead code. (More Explaination about `-server` and `-client` in the next section).
+not affect output of program. Optimizing compilers are adept at spotting dead code. Normally, benchmark programs often don't produce any output, which means some, or all, of the code can be optimized away without one realizing it, at which point one is measuring less execution than actually there is.
 
+Consider the following code <sup>[1]</sup>, where `doSomeStuff()` runs nested `for` loops to calculate the sum of the iterations. 
+The `doSomeStuff()` method is supposed to give the threads something to do, so we can infer something about the scheduling overhead of multiple threads from the run time of `StupidThreadBenchmark`. However, the compiler can determine that all the code in `doSomeStuff` is dead, and optimize it all away because `uselessSum` is never used. Once the code inside the loop goes away, the loops can go away, too, leaving `doSomeStuff()` entirely empty !
 
 ````
-// Shows how the compiler optimizes dead code
+// Listing 1: Shows how the compiler optimizes dead code
 // StupidThreadTest.java
 
 package edu.buffalo.cse605;
@@ -120,18 +116,18 @@ public class StupidThreadTest {
     }
 
     public static void main(String[] args) throws InterruptedException {
-    	doSomeStuff();
+      doSomeStuff();
         
         nThreads = Integer.parseInt(args[0]);
         
         Thread[] threads = new Thread[nThreads];
         
         for (int i=0; i<nThreads; i++) {
-        	threads[i] = new Thread(new Runnable() {
-        		public void run() { 
-        			doSomeStuff(); 
-        		}
-        	});
+          threads[i] = new Thread(new Runnable() {
+            public void run() { 
+              doSomeStuff(); 
+            }
+          });
         }
         
         final long start = System.currentTimeMillis();
@@ -142,7 +138,7 @@ public class StupidThreadTest {
         final long end = System.currentTimeMillis();
         System.out.println("Time: " + (end-start) + "ms");
     }
-}
+}]
 
 ````
 
@@ -186,12 +182,13 @@ $ java -server -XX:+PrintCompilation edu.buffalo.cse605.StupidThreadTest 1000
     275  13       edu.buffalo.cse605.StupidThreadTest::doSomeStuff (42 bytes)
 Time: 978ms
 ````
-
-**Conclusion : ** As from the above example, JVM decides to do optimization by eliminating dead code and thus there is a 10x performance difference by a mere `return` statement.
+**Conclusion : ** As from the above example, JVM decides to do optimization by eliminating dead code and thus there is a 10x performance difference. Remember, that in this case, the purpose of the task was defeated because of JVM's aggressive optimization.
 
 ##### 2. JVM Modes (-server and -client)
 
-There are two types of the HotSpot JVM, namely `-server` and `-client`. The server VM uses a larger default size for the heap, a parallel garbage collector, and optimizes code more aggressively at run time. The client VM is more conservative, resulting in shorter startup time and lower memory footprint. Thanks to a concept called 'JVM ergonomics', the type of JVM is chosen automatically at JVM startup time based on certain criteria regarding the available hardware and operating system.
+There are two types of the HotSpot JVM, namely `-server` and `-client`. The server VM uses a larger default size for the heap, a parallel garbage collector, and optimizes code more aggressively at run time. The client VM is more conservative, resulting in shorter startup time and lower memory footprint.
+
+In particular, many micro benchmarks perform much "better" when run with `-server` than with `-client`, not because the server compiler is faster (though it often is) but because the server compiler is more adept at optimizing away blocks of dead code. (More Explaination about `-server` and `-client` in the next section).
 
 ##### 3. Warmup
 
@@ -199,7 +196,7 @@ JVM will compile code to achieve greater performance based on runtime profiling.
 
 Hotspot JVM will count invocations of a method return plus branch backs for loops in that method, and if this exceeds 10K in server mode the method will be compiled. The compiled code on normal JIT'ing can be used when the method is next called.
 
-What this means is that, one is likely to get better optimised code by doing a small number of shorter warm ups than a single large one.
+What this means is that, one is likely to get better optimized code by doing a small number of shorter warm ups than a single large one.
 
 > NOTE: When using thin locks (Atomic), it is important to create new primitive object after every warmup run. Although warm up aids in compiling "hot code" paths, it may force the JVM to convert the thin locks into fat locks leading to performance drops.
 
@@ -256,67 +253,67 @@ counter = 500000000
 
 With the context of "Warmup" i.e compiling hot code instead of JITing, if a loop is still iterating it may make sense to replace the method before the loop completes, especially if it has many iterations to go.  On Stack Replacement [OSR] is the means by which a method gets replaced with a compiled version part way through iterating a loop.
 
-Although OSR sounds fantastic, it 'sometimes' cannot do loop-hoisting, array-bounds check elimination, or loop unrolling. Thus it is better to structure code in such a away that OSR
+Although OSR sounds fantastic, it **sometimes** (< JDK 7) cannot do loop-hoisting, array-bounds check elimination, or loop unrolling.
 
 ````
-// Program
+// Listing 2: Test the effects of OSR
 
 package edu.buffalo.cse605;
 
 import static java.lang.System.out;
 public class OSR {
 
-	private static final int[] array = new int[10 * 1000];
-	private static final long ITERATIONS = 1000 * 10000;
-	static {
-	    for (int i = 0; i < array.length; i++) {
-	        array[i] = i;
-	    }
-	}
+  private static final int[] array = new int[10 * 1000];
+  private static final long ITERATIONS = 1000 * 10000;
+  static {
+      for (int i = 0; i < array.length; i++) {
+          array[i] = i;
+      }
+  }
 
-	public static void main(String[] args) {
-		 int osr = Integer.parseInt(args[0]); 
-	    long t1 = System.nanoTime();
-	    long result = 0;
-	   
-	    if ( osr == 1)  {
-		    for (int i = 0; i < 1000 * 1000; i++) {    // outer loop
-		        for (int j = 0; j < array.length; j++) {    // inner loop 1
-		            result += array[j];
-		        }
-		        for (int j = 0; j < array.length; j++) {    // inner loop 2
-		            result ^= array[j];
-		        }
-		    }
-	    } else {
-		    for (int i = 0; i < ITERATIONS; i++) {    // sole loop
-		        result = add(result);
-		        result = xor(result);
-		    }
-		 }
+  public static void main(String[] args) {
+     int osr = Integer.parseInt(args[0]); 
+      long t1 = System.nanoTime();
+      long result = 0;
+     
+      if ( osr == 1)  {
+        for (int i = 0; i < 1000 * 1000; i++) {    // outer loop
+            for (int j = 0; j < array.length; j++) {    // inner loop 1
+                result += array[j];
+            }
+            for (int j = 0; j < array.length; j++) {    // inner loop 2
+                result ^= array[j];
+            }
+        }
+      } else {
+        for (int i = 0; i < ITERATIONS; i++) {    // sole loop
+            result = add(result);
+            result = xor(result);
+        }
+     }
 
 
-	    long t2 = System.nanoTime();
-	    System.out.println("Execution time: " + ((t2 - t1) * 1e-9) +
-	        " seconds to compute result = " + result);
-		out.printf("%,d ns/op\n", (t2 - t1) / (ITERATIONS * array.length));
-		out.printf("%,d ops/s\n", (ITERATIONS * array.length * 1000000000L) / (t2 - t1));
-	}
-	
-	private static long add(long result) {    // method extraction of inner loop 1
-	    for (int j = 0; j < array.length; j++) {
-	        result += array[j];
-	    }
-	    return result;
-	}
-	
-	private static long xor(long result) {    // method extraction of inner loop 2
-	    for (int j = 0; j < array.length; j++) {
-	        result ^= array[j];
-	    }
-	    return result;
-	}
-}
+      long t2 = System.nanoTime();
+      System.out.println("Execution time: " + ((t2 - t1) * 1e-9) +
+          " seconds to compute result = " + result);
+    out.printf("%,d ns/op\n", (t2 - t1) / (ITERATIONS * array.length));
+    out.printf("%,d ops/s\n", (ITERATIONS * array.length * 1000000000L) / (t2 - t1));
+  }
+  
+  private static long add(long result) {    // method extraction of inner loop 1
+      for (int j = 0; j < array.length; j++) {
+          result += array[j];
+      }
+      return result;
+  }
+  
+  private static long xor(long result) {    // method extraction of inner loop 2
+      for (int j = 0; j < array.length; j++) {
+          result ^= array[j];
+      }
+      return result;
+  }
+}]
 ````
 
 ````
@@ -343,12 +340,59 @@ Execution time: 147.71015500000001 seconds to compute result = 499950000000000
 52,577,831 ops/s
 ````
 
-
 ##### 5. Deoptimization
 
-The JVM can stop using a compiled method and return to interpreting it for a while before recompiling it. This can happen when assumptions made by an optimizing dynamic compiler have become outdated. One example is class loading that invalidates monomorphic call transformations. Another example is uncommon traps: when a code block is initially compiled, only the most likely code path is compiled, while atypical branches (such as exception paths) are left interpreted. But if the uncommon traps turn out to be commonly executed, then they become hotspot paths that trigger recompilation.
+The JVM can stop using a compiled method and return to interpreting it for a while before recompiling it. This can happen when assumptions made by an optimizing dynamic compiler have become outdated. One example is class loading that invalidates monomorphic call transformations (Converting a virtual method call to a direct method call is called monomorphic call transformation). 
 
-### Using the Harness
+Another example is uncommon traps: when a code block is initially compiled, only the most likely code path is compiled, while atypical branches (such as exception paths) are left interpreted. But if the uncommon traps turn out to be commonly executed, then they become hotspot paths that trigger recompilation.
+
+````
+// Listing 3: How inlining can lead to better dead-code optimization
+public class Inline {
+  public final void inner(String s) {
+    if (s == null)
+      return;
+    else {
+      // do something really complicated
+    }
+  }
+
+  public void outer() {
+    String s=null; 
+    inner(s);
+  }
+}
+````
+
+Listing 3 [] shows an example of the type of optimization that is enabled through inlining. The outer() method calls inner() with an argument of null, which will result in inner() doing nothing. But by inlining the call to inner(), the compiler can see that the else branch of inner() is dead code, and can optimize the test and the else branch away, at which point it can optimize away the entirety of the call to inner(). Had inner() not been inlined, this optimization would not have been possible.
+
+##### 6. JVM options
+
+Some relevant JVM options are:
+
+1. Type of JVM: server (-server) versus client (-client).
+2. Ensuring sufficient memory is available (-Xmx).
+3. Type of garbage collector used (advanced JVMs offer many tuning options, but be careful).
+4. Whether or not class garbage collection is allowed (-Xnoclassgc). The default is that class GC occurs; it has been argued that using -Xnoclassgc is a bad idea.
+5. Whether or not escape analysis is being performed (-XX:+DoEscapeAnalysis).
+6. Whether or not large page heaps are supported (-XX:+UseLargePages).
+7. If thread stack size has been changed (for example, -Xss128k).
+8. Whether or not JIT compiling is always used (-Xcomp), never used (-Xint), or only done on hotspots (-Xmixed; this is the default, and highest performance option).
+9. The amount of profiling that is accumulated before JIT compilation occurs (-XX:CompileThreshold), and/or background JIT compilation (-Xbatch), and/or tiered JIT compilation (-XX:+TieredCompilation).
+10. Whether or not biased locking is being performed (-XX:+UseBiasedLocking); note that JDK 1.6+ automatically does this.
+11. Whether or not the latest experimental performance tweaks have been activated (-XX:+AggressiveOpts).
+12. Enabling or disabling assertions (-enableassertions and -enablesystemassertions).
+13. Enabling or disabling strict native call checking (-Xcheck:jni).
+14. Enabling memory location optimizations for NUMA multi-CPU systems (-XX:+UseNUMA).
+
+### Our Harness Architecture
+
+<img src='https://dl.dropbox.com/u/32194349/architecture.png' />
+
+As shown in the architecture diagram, 
+
+#### How to use the harness
+
 ````
 $ java -server edu.buffalo.cse605.Harness <TESTTYPE> <WORKLOADTYPE> <NUMTHREADS> <WARMUP>
 
@@ -422,7 +466,7 @@ In this test, we determine the single thread performance of various locking sche
 
 1. **Iterations:** 1 Billion
 2. **Data:** Counter
-3. **Threads:** 1,2,4,8,16,32,64
+3. **Threads:** 1
 
 ##### Code
 ````
@@ -436,7 +480,7 @@ In this test, we determine the single thread performance of various locking sche
 <th>Method</th>
 <th>Method (Without Warmup)</th>
 <th>Method (With Warmup)</th>
-<th>% compared to Normal</th>
+<th>% compared to normal case (With Warmup)</th>
 </tr>
 <tr>
 <td>Normal</td>
@@ -476,27 +520,86 @@ In this test, we determine the single thread performance of various locking sche
 </tr>
 </table>
 
+##### Graph
+
+<img src='https://dl.dropbox.com/u/32194349/Graph%201.png' />
+<img src='https://dl.dropbox.com/u/32194349/Graph%202.png' />
+
 ##### Conclusion
 
 // TODO
 
-#### Test 3: Biased/Unbiased Locking JVM Warmup Test
+#### Test 3: Performance for various locking schemes under contention
 
-Test Biased/Unbiased Locking Performance 
+Similar to the previous test, in this test, we determine the  performance of various locking schemes under contention viz.
 
-1. contention/no contention on resources
-2. with warmup/non-warmup.
+1. Volatile
+2. AtomicLong (CAS)
+3. JVM Locks (Effect of Biased/Unbiased Locking)
+4. JUC Locks (Reentrant lock)
 
-The testing framework included
+##### Setup
 
-1. 100, 1000 mil elements
-2. synchronized method on Object (every iteration of the loop)
-3. Biased Locking and Unbiased Locking
+1. **Iterations:** 1 Billion
+2. **Data:** Counter
+3. **Threads:** 2
 
+##### Code
+````
+[TestLocks.java]
+````
+
+##### Results
+
+<table>
+<tr>
+<th>Method</th>
+<th>Method (Without Warmup)</th>
+<th>Method (With Warmup)</th>
+<th>% drop when compared with its single thread implementation (With Warmup)</th>
+</tr>
+<tr>
+<td>Normal</td>
+<td>516,866,383</td>
+<td>580,879,311</td>
+<td>n/a</td>
+</tr>
+<tr>
+<td>ATO</td>
+<td>10,554,537</td>
+<td>8,728,628</td>
+<td>4X drop</td>
+</tr>
+<tr>
+<td>JVM</td>
+<td>4,172,108</td>
+<td>4,234,268</td>
+<td>4X drop</td>
+</tr>
+<tr>
+<td>JVM (+Biased)</td>
+<td>6,598,297</td>
+<td>3,187,797</td>
+<td>56X drop</td>
+</tr>
+<tr>
+<td>JUC*</td>
+<td>2,865,952</td>
+<td>2,633,649</td>
+<td>7X drop</td>
+</tr>
+</table>
+
+> * The JUC and JUC (warmup) benchmark under contention exhibited GC behavior (17 (+0.082493 sec) and 25 (+0.116112 sec) times respectively).
+
+
+##### Graph
+
+<img src='https://dl.dropbox.com/u/32194349/Graph%203.png' />
+<img src='https://dl.dropbox.com/u/32194349/Graph%204.png' />
 
 ### Conclusion
-
-
+ // TODO
 
 <!--````
  # run.sh
@@ -506,19 +609,24 @@ workloads=(W1 W2 W3 W4 W5)
  # warmup
 for i in "${workloads[@]}"; 
 do
-	for j in "${threads[@]}"; 
-	do 
-  		java -server edu.buffalo.cse605.Harness $i $e $j 1
-	done
+  for j in "${threads[@]}"; 
+  do 
+      java -server edu.buffalo.cse605.Harness $i $e $j 1
+  done
 done
 
  # No warmup
 for i in "${workloads[@]}"; 
 do
-	for j in "${threads[@]}"; 
-	do 
-  		java -server edu.buffalo.cse605.Harness $i $e $j 0
-	done
+  for j in "${threads[@]}"; 
+  do 
+      java -server edu.buffalo.cse605.Harness $i $e $j 0
+  done
 done
 ````
 -->
+
+
+## References
+
+[1]: http://www.ibm.com/developerworks/java/library/j-jtp12214/
