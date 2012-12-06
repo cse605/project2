@@ -1,4 +1,4 @@
-# Measuring impact of sychronization primitives in highly concurrent systems
+# Measuring impact of sychronization primitives in concurrent systems
 
 Data synchronization is the core essential for writing concurrent programs. Ideally, a synchronization technique should be able to fully exploit the available cores, leading to improved performance. This study investigates aspects of synchronization and co-ordination for large concurrent systems. But before diving into that, this study also validates and aggregates some of the best methodologies to perform micro benchmarking in the JVM as found from various journals and studies.
 
@@ -385,43 +385,10 @@ Some relevant JVM options are:
 13. Enabling or disabling strict native call checking (-Xcheck:jni).
 14. Enabling memory location optimizations for NUMA multi-CPU systems (-XX:+UseNUMA).
 
-### Our Harness Architecture
 
-<img src='https://dl.dropbox.com/u/32194349/architecture.png' />
-
-As shown in the architecture diagram, 
-
-#### How to use the harness
-
-````
-$ java -server edu.buffalo.cse605.Harness <TESTTYPE> <WORKLOADTYPE> <NUMTHREADS> <WARMUP>
-
-TESTTYPE = {DEFAULT, JVM, JUC, JUCRW}
-
-1. DEFAULT - No locking strategy
-2. JVM - Synchronized method
-3. JUC - java.util.concurrent.ReentrantLock
-4. JUCRW - java.util.concurrent.ReentrantReadWriteLock
-
-
-WORKLOADTYPE = {W1, W2, W3, W4, W5}
-
-1. 100% Read (W1) - Reads iteratively/randomly from the list
-2. 100% Write (W2) - Writes iteratively/randomly to the list
-3. 80% Read, 20% Write (W3) 
-4. 20% Read, 80% Write (W4)
-5. 50% Read, 50% Write (W5)
-
-
-NUMTHREADS = INTEGER (1,2,4,8,16,32,64)
-WARMUP = 0 - No warmup; 1 - Warmup
-
-````
 ## Tests
 
-After a fair understanding on how to write Micro-Benchmarks, 
-
-### Lock Evaluation
+### 1. Lock Evaluation
 
 We start out with evaluating the locking schemes available in the JDK. 
 > CAS instructions tend to be the most expensive type of CPU instructions (architecture dependent). Locks are often un-contended which gives rise to a possible optimization whereby a lock can be biased to the un-contended thread using techniques to avoid the use of atomic instructions. This biasing allows a lock in theory to be quickly reacquired by the same thread. If the lock turns out to be contended by multiple threads the algorithm with revert from being biased and fall back to the standard approach using atomic instructions.
@@ -601,6 +568,75 @@ Similar to the previous test, in this test, we determine the  performance of var
 
 ### Conclusion
  // TODO
+
+
+### 2. Our Benchmark Lock Tests
+
+Now that we have a fair understanding of some important factors to consider when writing benchmarks, we would like to present our findings on the different locking schemes based on a number of workload scenarios.
+
+#### Benchmark Harness Architecture
+
+<img src='https://dl.dropbox.com/u/32194349/architecture.png' />
+
+**Data Strucuture**: Array, 1 billion Elements
+
+##### Features
+
+1. Uses `System.nanoTime` instead of `System.currentTimeMillis` for higher resolution
+2. Uses `CyclicBarrier` to ensure threads start the workloads at the same time.
+3. Code Warmup.  In general, the initial performance is usually relatively slow, and then it greatly improves for a while (usually in discrete leaps) until it reaches a steady state. 
+4. Dead Code Elimination
+5. Ensures all Class Loading is done before the actuall test (atleast most of it)
+6. Use of JVM flags such as -XX:+PrintCompilation, -verbose:gc to understand method compilation and GC stats.
+
+##### What does the benchmark aim to do ?
+
+We evaluate every individual lock by running the benchmark under different levels of contention in the following workloads 
+
+**Workloads**
+
+1. W1 - 100% Read - Reads iteratively/randomly from the list
+2. W2 - 100% Write - Writes iteratively/randomly to the list
+3. W3 - 80% Read, 20% Write
+4. W4 - 20% Read, 80% Write
+5. W5 - 50% Read, 50% Write
+
+**Using the Harness**
+
+````
+$ java -server edu.buffalo.cse605.Harness <TESTTYPE> <WORKLOADTYPE> <NUMTHREADS> <WARMUP>
+
+Parameters
+
+TESTTYPE = {DEFAULT, JVM, JUC, JUCRW}
+
+1. DEFAULT - No locking strategy
+2. JVM - Synchronized method
+3. JUC - java.util.concurrent.ReentrantLock
+4. JUCRW - java.util.concurrent.ReentrantReadWriteLock
+
+WORKLOADTYPE = {W1, W2, W3, W4, W5}
+
+NUMTHREADS = INTEGER (1,2,4,8,16,32,64)
+WARMUP = 0 - No warmup; 1 - Warmup
+````
+
+#### Test 1: Workload Performance without any synchronization primitives
+
+<img src='https://dl.dropbox.com/u/32194349/Graph%205.png' />
+
+
+#### Test 2a: Workload Performance with JVM (Sync) Locking
+
+<img src='https://dl.dropbox.com/u/32194349/Graph%206.png' />
+
+<img src='https://dl.dropbox.com/u/32194349/Graph%207.png' />
+
+#### Test 2b: Workload Performance with Biased JVM (Sync) Locking
+
+<img src='https://dl.dropbox.com/u/32194349/Graph%208.png' />
+
+<img src='https://dl.dropbox.com/u/32194349/Graph%209.png' />
 
 <!--````
  # run.sh
