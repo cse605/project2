@@ -682,8 +682,15 @@ done
 
 ## Conclusion
 
+// Write Conclusion
 
 ## References
+
+[1] [http://lmax-exchange.github.com/disruptor/files/Disruptor-1.pdf](http://lmax-exchange.github.com/disruptor/files/Disruptor-1.pdf)
+
+[2] [http://www.ibm.com/developerworks/java/library/j-jt1221/](http://www.ibm.com/developerworks/java/library/j-jt1221/)
+
+[3] [http://www.ibm.com/developerworks/java/library/j-benchmark1/index.html](http://www.ibm.com/developerworks/java/library/j-benchmark1/index.html)
 
 [1]: http://lmax-exchange.github.com/disruptor/files/Disruptor-1.0.pdf
 [2]: http://www.ibm.com/developerworks/java/library/j-jtp12214/
