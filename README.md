@@ -1,4 +1,4 @@
-# Measuring impact of sychronization primitives in concurrent systems
+# Measuring (How to measure) impact of sychronization primitives in concurrent systems
 
 Data synchronization is the core essential for writing concurrent programs. Ideally, a synchronization technique should be able to fully exploit the available cores, leading to improved performance. This study investigates aspects of synchronization and co-ordination for large concurrent systems. But before diving into that, this study also validates and aggregates some of the best methodologies to perform micro benchmarking in the JVM as found from various journals and studies.
 
@@ -417,15 +417,10 @@ In this test, we increment a counter within a lock, and increase the number of c
 <img src='http://dl.dropbox.com/u/32194349/Graph%200.png' />
 
 ##### Conclusion
-  From the graph, we can see that when we have more threads, due to the contention, the performance
-does not increase. Besides, the performance with one thread is the best. 
 
-<<<<<<< HEAD
 From the graph, we can see that when we have more threads, due to the contention, the performance does not increase. Actually, we can see that the performance with one thread is the best.
 
 1. We can see that when using locks, the performance drops dramatically. Among the four lock schemes that we use, we can find that the biased lock works best.
-=======
->>>>>>> 1a50ef2979de0e13904ead190090a87f629c5fc2
 
 
 #### Test 1: Single Thread Performance for various locking schemes.
@@ -502,19 +497,7 @@ In this test, we determine the single thread performance of various locking sche
 
 ##### Conclusion
 
-<<<<<<< HEAD
 1. Compares the results of methods without warm up and the methods with warm up. When having warm up, we should expect that the performance should be better. But from this graph, we can see that for volatile and atomic, it is not the case. So in benchmark when using thin locks (Atomic), it is important to create new primitive object after every warm up run. Although warm up aids in compiling "hot code" paths, it may force the JVM to convert the thin locks into fat locks leading to performance drops.
-=======
-(1) We can see that when using locks, the performance drops dramatically. Among the four lock schemes that 
-    we use, we can find that the biased lock works best. 
-    
-(2) Compares the results of methods without warm up and the methods with warm up. When having warm up, we 
-    should expect that the performance should be better. But from this graph, we can see that for volatile and
-    atomic, it is not the case. So in benchmark when using thin locks (Atomic), it is important to create new
-    primitive object after every warm up run. Although warm up aids in compiling "hot code" paths, it may force 
-    the JVM to convert the thin locks into fat locks leading to performance drops.
-
->>>>>>> 1a50ef2979de0e13904ead190090a87f629c5fc2
 
 #### Test 3: Performance for various locking schemes under contention
 
@@ -585,15 +568,8 @@ Similar to the previous test, in this test, we determine the  performance of var
 <img src='http://dl.dropbox.com/u/32194349/Graph%204.png' />
 
 ### Conclusion
-<<<<<<< HEAD
 
 1. This test yielded a very interesting result, When done on an Intel machine (1.7Ghz Intel Core i5 Sandybridge), the result is better than the normal case which is what we expected. But when we use the same benchmark on the '64 Core - AMD Opteron Machine' machine, the performance is worse than the normal case. We speculate this bizarre result maybe due to the difference in architecture of the machines and the overhead with CAS operations.
-=======
- When we do this on the Intel machine, the result is better than the normal case which is what we expected. But 
- when we use the same benchmark on the Oscar machine, the performance is worse than the normal case. We think 
- the result maybe due to the different architecture of the machines and we are not sure whether the difference 
- of java version account for this.
->>>>>>> 1a50ef2979de0e13904ead190090a87f629c5fc2
 
 
 ### 2. Our Benchmark Lock Tests
@@ -714,7 +690,6 @@ done
 
 ## Conclusion
 
-<<<<<<< HEAD
 We started this study in a bid to learn the overhead of locking primitives in JAVA, but we went onto understand the various facets involved when benchmarking JAVA programs.
 It is very important to answer the ""what,why and how to measure your system" before actually moving forward to write a benchmark to do it.
 
@@ -722,22 +697,6 @@ It is very important to answer the ""what,why and how to measure your system" be
 2. CAS is relatively cheap on the newer machines and highly architecture dependent. It does not scale well.
 3. Biased Locking is highly recommended when there is no or very little contention.
 4. JVM is free to optimize your code how ever it feels. While benchmarking make sure to address "Dead code elimination", "De-optimization", "OSR", "GC Kickins".
-=======
-From the first graph, (workload performance without any synchronization primitives), the performance is increasing
-almost linearly based on the number of the threads. The switch between the thread degrade the performance at some 
-degree.
-
-We test the workload using 4 kinds of lock schemes. As observed in the graph, as the increase of the 
-threads, the performance degrades. As for the read write locks, we expected that it can work better than the other 
-locks, as it allows multiple threads to read at the same time, but it is not the case. Besides, from the read write 
-lock graph, we can see that the overhead of read is more expensive than the write.
-
-For the other three locks, the overhead  of the write is much more expensive than the read. Besides, when increasing
-the threads from 1 to 2 or more, the performance will first drop down sharply and then enter a comparatively stable
-state. The JVM locking(biased/unbiased) works better than the reentrant lock when the number of threads is small, 
-when there are more than 4 threads, the reentrant lock works better. 
-
->>>>>>> 1a50ef2979de0e13904ead190090a87f629c5fc2
 
 ## References
 
