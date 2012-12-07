@@ -418,7 +418,9 @@ In this test, we increment a counter within a lock, and increase the number of c
 
 ##### Conclusion
 
-// TODO
+From the graph, we can see that when we have more threads, due to the contention, the performance does not increase. Actually, we can see that the performance with one thread is the best.
+
+1. We can see that when using locks, the performance drops dramatically. Among the four lock schemes that we use, we can find that the biased lock works best.
 
 
 #### Test 1: Single Thread Performance for various locking schemes.
@@ -446,8 +448,8 @@ In this test, we determine the single thread performance of various locking sche
 <table>
 <tr>
 <th>Method</th>
-<th>Method (Without Warmup)</th>
-<th>Method (With Warmup)</th>
+<th>Method ops/sec (Without Warmup)</th>
+<th>Method ops/sec (With Warmup)</th>
 <th>% compared to normal case (With Warmup)</th>
 </tr>
 <tr>
@@ -495,7 +497,7 @@ In this test, we determine the single thread performance of various locking sche
 
 ##### Conclusion
 
-// TODO
+1. Compares the results of methods without warm up and the methods with warm up. When having warm up, we should expect that the performance should be better. But from this graph, we can see that for volatile and atomic, it is not the case. So in benchmark when using thin locks (Atomic), it is important to create new primitive object after every warm up run. Although warm up aids in compiling "hot code" paths, it may force the JVM to convert the thin locks into fat locks leading to performance drops.
 
 #### Test 3: Performance for various locking schemes under contention
 
@@ -560,14 +562,14 @@ Similar to the previous test, in this test, we determine the  performance of var
 
 > * The JUC and JUC (warmup) benchmark under contention exhibited GC behavior (17 (+0.082493 sec) and 25 (+0.116112 sec) times respectively).
 
-
 ##### Graph
 
 <img src='http://dl.dropbox.com/u/32194349/Graph%203.png' />
 <img src='http://dl.dropbox.com/u/32194349/Graph%204.png' />
 
 ### Conclusion
- // TODO
+
+1. This test yielded a very interesting result, When done on an Intel machine (1.7Ghz Intel Core i5 Sandybridge), the result is better than the normal case which is what we expected. But when we use the same benchmark on the '64 Core - AMD Opteron Machine' machine, the performance is worse than the normal case. We speculate this bizarre result maybe due to the difference in architecture of the machines and the overhead with CAS operations.
 
 
 ### 2. Our Benchmark Lock Tests
@@ -577,6 +579,8 @@ Now that we have a fair understanding of some important factors to consider when
 #### Benchmark Harness Architecture
 
 <img src='http://dl.dropbox.com/u/32194349/architecture.png' />
+
+<img src='http://dl.dropbox.com/u/32194349/array.png' />
 
 **Data Strucuture**: Array, 1 billion Elements
 
@@ -674,15 +678,25 @@ done
 
 <img src='http://dl.dropbox.com/u/32194349/Graph%2011.png' />
 
+> We saw a lot of GC activity when running these benchmarks, ~ +1 sec added to the execution time.
+
 #### Test 4: Workload Performance with JUC (ReadWrite) Locking
 
 <img src='http://dl.dropbox.com/u/32194349/Graph%2012.png' />
 
 <img src='http://dl.dropbox.com/u/32194349/Graph%2013.png' />
 
+> We saw a lot of GC activity when running these benchmarks, ~ +2 sec added to the execution time.
+
 ## Conclusion
 
-// Write Conclusion
+We started this study in a bid to learn the overhead of locking primitives in JAVA, but we went onto understand the various facets involved when benchmarking JAVA programs.
+It is very important to answer the ""what,why and how to measure your system" before actually moving forward to write a benchmark to do it.
+
+1. Locking is expensive, remember there is 27x overhead (single thread) and over 175x overhead (contention) when compared to normal case.
+2. CAS is relatively cheap on the newer machines and highly architecture dependent. It does not scale well.
+3. Biased Locking is highly recommended when there is no or very little contention.
+4. JVM is free to optimize your code how ever it feels. While benchmarking make sure to address "Dead code elimination", "De-optimization", "OSR", "GC Kickins".
 
 ## References
 
@@ -690,7 +704,19 @@ done
 
 [2] [http://www.ibm.com/developerworks/java/library/j-jt1221/](http://www.ibm.com/developerworks/java/library/j-jt1221/)
 
-[3] [http://www.ibm.com/developerworks/java/library/j-benchmark1/index.html](http://www.ibm.com/developerworks/java/library/j-benchmark1/index.html)
+[3] [Robust Java benchmarking](http://www.ibm.com/developerworks/java/library/j-benchmark1/index.html)
+
+[Mechanical Sympathy](http://mechanical-sympathy.blogspot.com/)
+
+[Cliff Click's Blog](http://www.azulsystems.com/blog/cliff)
+
+[Art of Benchmarking by Cliff Click](http://www.azulsystems.com/sites/www.azulsystems.com/Cliff_Click_Art_of_Java_Benchmarking.pdf)
+
+[Bad Concurrency](http://bad-concurrency.blogspot.com/) by Micheal Barker
+
+[Details about -XX:PrintCompilation](https://gist.github.com/1165804#Notes.md)
+
+[Caliper - Microbenchmarking framework for Java](http://code.google.com/p/caliper/wiki/JavaMicrobenchmarks)
 
 [1]: http://lmax-exchange.github.com/disruptor/files/Disruptor-1.0.pdf
 [2]: http://www.ibm.com/developerworks/java/library/j-jtp12214/

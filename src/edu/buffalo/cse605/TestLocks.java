@@ -14,7 +14,7 @@ public class TestLocks implements Runnable {
   public static ConcurrencyType concurrencyType;
 
   public static final long WARMUP_ITERATIONS = 100L * 1000L;
-  public static final long ITERATIONS = 500L * 1000L * 1000L;
+  public static final long ITERATIONS = 1000L * 1000L * 1000L;
   public static long counter = 0L;
   public static AtomicLong atoCounter = new AtomicLong();
   public static volatile long volCounter = 0L;
@@ -48,9 +48,10 @@ public class TestLocks implements Runnable {
         runTest(numThreads, WARMUP_ITERATIONS);
         counter = 0L;
         volCounter = 0L;
-        atoCounter = new AtomicLong();
+        atoCounter.lazySet(0L);
       }
     }
+    
     // TODO Auto-generated method stub
     final long start = System.nanoTime();
     runTest(numThreads, ITERATIONS);

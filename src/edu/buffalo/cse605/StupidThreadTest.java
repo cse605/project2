@@ -5,8 +5,8 @@ public class StupidThreadTest {
     
     public static double doSomeStuff() {
         double uselessSum = 0;
-        for (int i=0; i<1000000; i++) {
-            for (int j=0;j<1000000; j++) {
+        for (int i=0; i<10000; i++) {
+            for (int j=0;j<10000; j++) {
                 uselessSum += (double) i + (double) j;
             }
         }
@@ -16,7 +16,9 @@ public class StupidThreadTest {
 
     public static void main(String[] args) throws InterruptedException {
 //        double uselessSum = doSomeStuff();
-    	doSomeStuff();
+    	for (int j=0;j<10; j++) {
+    		doSomeStuff();
+    	}
         
         nThreads = Integer.parseInt(args[0]);
         
